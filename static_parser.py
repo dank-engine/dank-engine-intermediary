@@ -65,32 +65,52 @@ canonical_trips = {
 with open('SEQ_GTFS/trips.txt') as f:
     trips = list(csv.DictReader(f))
 
-with open('SEQ_GTFS/stop_times.txt') as f:
-    stop_times = f.read()
+# with open('SEQ_GTFS/stop_times.txt') as f:
+#     # stop_times = f.read()
+#     trips_ = defaultdict(list)
+#     for i, li in enumerate(f):
+#         if i % 10000 == 0:
+#             print(i)
+#         l = li.split(',')
+#         trips_[l[0]].append(l[3])
+
+# with open('trips.json', 'w') as f:
+#     json.dump(trips_, f)
+
 
 def find_trip_on_route(route):
     for t in trips:
         if t['route_id'] == route:
             return t['trip_id']
 
-def find_stops_on_trip(trip):
-    stops = set()
-    for l in stop_times:
-        l = l.split(',')
-        if l[0] == trip:
-            stops.add(l[3])
-        elif stops:
-            return stops
-    return stops
+with open('trip_to_stops.json') as f:
+    trip_to_stops = json.load(f)
 
+def find_stops_on_trip(trip):
+    return trip_to_stops[trip]
+
+with open('SEQ_GTFS/stops.txt') as f:
+    d = {}
+    for l in csv.DictReader(f):
+        d[l['stop_id']] = l['stop_name']
+    with open('stops_to_names.json', 'w') as f2:
+        json.dump(d, f2)
+
+stops_per_route = {}
 
 for strip, routes in canonical_trips.items():
-    stops = set()
+    stops = list()
     for r in routes:
         print(strip, r)
         t = find_trip_on_route(r)
         print(t)
-        print(find_stops_on_trip(t))
+        # print(find_stops_on_trip(t))
+        stops.extend(x for x in find_stops_on_trip(t) if x not in stops)
+    stops_per_route[str(strip)] = list(stops)
+    print(strip, [d[x] for x in stops])
+
+with open('routes_to_stops.json', 'w') as f:
+    json.dump(stops_per_route, f)
 
 
 
@@ -109,7 +129,7 @@ def main():
         routes_to_destinations[code] = name.split(' - ')
         destinations.update(routes_to_destinations[code])
 
-    print(routes_to_destinations)
+    # print(routes_to_destinations)
 
 if __name__ == "__main__":
     main()
