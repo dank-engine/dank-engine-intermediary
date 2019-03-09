@@ -53,29 +53,22 @@ route_colours = {
     'Cleveland': RouteStrip.DarkBlue
 }
 
-canonical_trips = {
-    RouteStrip.Green: ('RWCA-1256', 'BRGY-1167'),
-    RouteStrip.Red: ('BNFG-1167', ),
-    RouteStrip.LightBlue: ('RPSP-1167', ),
-    RouteStrip.DarkBlue: ('SHCL-1167', ),
-    RouteStrip.Yellow: ('VLBD-1167', ),
-    RouteStrip.Purple: ('BRDB-1256', )
-}
+
 
 with open('SEQ_GTFS/trips.txt') as f:
     trips = list(csv.DictReader(f))
 
-with open('SEQ_GTFS/stop_times.txt') as f:
-    # stop_times = f.read()
-    trips_ = defaultdict(list)
-    for i, li in enumerate(f):
-        if i % 10000 == 0:
-            print(i)
-        l = li.split(',')
-        trips_[l[0]].append(l[3])
+# with open('SEQ_GTFS/stop_times.txt') as f:
+#     # stop_times = f.read()
+#     trips_ = defaultdict(list)
+#     for i, li in enumerate(f):
+#         if i % 10000 == 0:
+#             print(i)
+#         l = li.split(',')
+#         trips_[l[0]].append(l[3])
 
-with open('trip_to_stops.json', 'w') as f:
-    json.dump(trips_, f)
+# with open('trip_to_stops.json', 'w') as f:
+#     json.dump(trips_, f)
 
 
 def find_trip_on_route(route):
@@ -96,6 +89,16 @@ with open('SEQ_GTFS/stops.txt') as f:
     with open('stops_to_names.json', 'w') as f2:
         json.dump(d, f2)
 
+# all trips here are NORTHBOUND
+canonical_trips = {
+    RouteStrip.Green: ('RWCA-1256', 'BRGY-1167'),
+    RouteStrip.Red: ('BNFG-1167', ),
+    RouteStrip.LightBlue: ('SPRP-1167', ),
+    RouteStrip.DarkBlue: ('CLSH-1167', ),
+    RouteStrip.Yellow: ('VLBD-1167', ),
+    RouteStrip.Purple: ('BRDB-1256', )
+}
+
 stops_per_route = {}
 
 for strip, routes in canonical_trips.items():
@@ -109,8 +112,11 @@ for strip, routes in canonical_trips.items():
     stops_per_route[str(strip)] = list(stops)
     print(strip, [d[x] for x in stops])
 
+
 with open('routes_to_stops.json', 'w') as f:
-    json.dump(stops_per_route, f)
+    json.dump(stops_per_route, f, indent=2)
+
+
 
 stations = defaultdict(list)
 
@@ -132,6 +138,16 @@ print(canonical_stops)
 
 with open('canonical_stops.json', 'w') as f:
     json.dump(canonical_stops, f)
+
+
+can_routes_to_stops = {}
+for route, stops in stops_per_route.items():
+    can_routes_to_stops[route] = [canonical_stops.get(s, s) for s in stops]
+
+with open('canonical_routes_to_stops.json', 'w' ) as f:
+    json.dump(can_routes_to_stops, f, indent=2)
+
+
 
 canonical_trip_to_stops = {}
 for trip, stops in trip_to_stops.items():
