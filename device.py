@@ -1,5 +1,6 @@
 # [[RRRRR], [GGGGG], [BBBBB]] -> bytes(id, R_id, G_id, B_id, ...)
 def convert_data(data) -> bytes:
+    message = []
     for i in range(data):
         message.append(i)
         message.append(data[0][i])
