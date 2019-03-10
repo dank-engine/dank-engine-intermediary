@@ -5,7 +5,11 @@ import enum
 
 import datetime 
 
+from typing import List, Dict
+
 from collections import namedtuple
+
+from dank_engine_server import data_passer
 
 TrainData = namedtuple('TrainData', 'timestamp trip_id route_id stop_id stopped arrival_time arrival_delay departure_time departure_delay stop_sequence')
 
@@ -30,11 +34,6 @@ with open('canonical_routes_to_stops.json') as f:
 
 print('Loading data took', datetime.datetime.now() - s)
 
-def request_train_data():
-    # TODO: connect to provider server
-    return data_passer.get_train_data(('SPRP', ))
-
-
 class Line(enum.Enum):
     Red = 0xff0000
     DarkBlue = 0x424bf4
@@ -50,7 +49,7 @@ class Direction(enum.Enum):
 # the 2-tuple of line colour and direction uniquely identify 
 # a LED strip.
 
-train_lines = {
+dest_to_strip = {
     'Ipswich': (Line.Green, Direction.Northbound),
     'Ferny Grove': (Line.Red, Direction.Northbound),
     'Redcliffe Peninsula': (Line.LightBlue, Direction.Northbound),
@@ -95,37 +94,36 @@ class RouteStripState:
         self.stop_states[i] = state
 
 
-_route_states = {}
-route_strip_states = {}
-for dest, line in train_lines.items():
-    if line not in _route_states:
-        _route_states[line] = RouteStripState(line[0], line[1], route_stops['RouteStrip.'+line[0].name])
-    route_strip_states[dest] = _route_states[line]
 
+class LEDStripManager:
+    def __init__(self):
+        self.strips = []
 
+    def add_led_strip(self, pins: List[int]):
+        self.strips.append(pins)
 
-def split_line_name(name):
-    return name.replace(' Line', '').replace(' line', '').split(' - ')
+    def get_led_strip(self, strip_index):
+        return self.strips[strip_index]
+    
 
 class Intermediary:
     def __init__(self):
-        self.next_stop = {} 
-        self.previous_time_remaining = {}
+        self.strip_states = {}
+        for dest, line in dest_to_strip.items():
+            if line not in self.strip_states:
+                self.strip_states[line] = RouteStripState(line[0], line[1], route_stops['RouteStrip.'+line[0].name])
 
-    # train_data attributes:
-    # timestamp
-    # trip_id
-    # route_id
-    # stop_id
-    # stopped
-    # arrival_time
-    # arrival_delay
-    # departure_time
-    # departure_delay
-    # stop_sequence
+    @staticmethod
+    def request_train_data():
+        # TODO: connect to provider server
+        return data_passer.get_train_data(('SPRP', ))
+
+    @staticmethod
+    def split_line_name(name):
+        return name.replace(' Line', '').replace(' line', '').split(' - ')
 
     def update(self, interval):
-        data = request_train_data()
+        data = self.request_train_data()
         print('Updating...')
 
         trains = []
@@ -134,9 +132,9 @@ class Intermediary:
             t = TrainData(*t)
             print()
             print(f'Handling route {t.route_id}, trip {t.trip_id}')
-            s = (split_line_name(train_names[t.route_id]))
+            s = (self.split_line_name(train_names[t.route_id]))
             print(s)
-            strip_state = route_strip_states[s[1]]
+            strip_state = self.strip_states[dest_to_strip[s[1]]]
             # print(t)
             # if train_data.timestamp:
             #     print(train_data.arrival_time - train_data.timestamp)
