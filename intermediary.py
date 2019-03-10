@@ -103,16 +103,6 @@ class RouteStripState:
         print(f' Stop index {i}')
 
         self.stop_states[i].set_state(mode, intensity)
-
-class LEDStripManager:
-    def __init__(self):
-        self.strips = []
-
-    def add_led_strip(self, pins: List[int]):
-        self.strips.append(pins)
-
-    def get_led_strip(self, strip_index):
-        return self.strips[strip_index]
     
 
 class Intermediary:
@@ -158,7 +148,6 @@ class Intermediary:
             # normalised canonical id of the station platform's stop id.
             c_prev = canonical.get(t.prev_stop_id, t.prev_stop_id)
             c_next = canonical.get(t.next_stop_id, t.next_stop_id)
-            
             try:
                 pass
                 # cur_index = trip_stops[t.trip_id].index(can_id)
