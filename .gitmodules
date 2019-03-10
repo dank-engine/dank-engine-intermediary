@@ -1,0 +1,3 @@
+[submodule "dank_engine_server"]
+	path = dank_engine_server
+	url = KentonLamGithub:dank-engine/dank-engine-server.git
