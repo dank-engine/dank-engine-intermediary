@@ -91,7 +91,8 @@ class RouteStripState:
         self.colour = colour 
         self.direction = direction
         self.stops = stops
-        self.stop_states = [StopState(colour)]
+        print(colour, 'has', len(stops))
+        self.stop_states = [StopState(colour) for _ in range(len(stops))]
 
     def clear_stops(self):
         for s in self.stop_states:
@@ -158,7 +159,8 @@ class Intermediary:
             if strip not in self.used_strips:
                 print(f' WARNING: line {strip} has no LED strip.')
                 continue
-
+            
+            # print(len(trip_stops[t.trip_id]))
             if len(trip_stops[t.trip_id]) > len(self.used_strips[strip]):
                 print(f' WARNING: trip {t.trip_id} has more stops than LEDS on {strip}.')
                 continue
@@ -166,32 +168,46 @@ class Intermediary:
             if t.stopped == 1: 
                 # train is stopped. current stop is where we're at.
                 cur_stop = c_prev
-                strip_state.set_stop_state(cur_stop, StopState.STOPPED)
+                strip_state.set_stop_state(cur_stop, StopModes.FLASH, 1)
             else:
                 # train in motion. backtrack for previous stop.
                 prev_stop = c_prev
                 next_stop = c_next
 
-                strip_state.set_stop_state(prev_stop, StopState.LEAVING)
-                strip_state.set_stop_state(next_stop, StopState.APPROACH)
+                strip_state.set_stop_state(prev_stop, StopModes.NORMAL, 1-float(t.percent))
+                strip_state.set_stop_state(next_stop, StopModes.NORMAL, float(t.percent))
 
         # print(trip_names)
 
-        print('Done')
-
     def update_arduino(self):
         print('Updating Arduino...')
-        pass
+        for strip, pins in self.used_strips.items():
+            strip_state = self.strip_states[strip]
+            for i, s_state in enumerate(strip_state.stop_states):
+                # exhausted number of stops with spare pins
+                pin = pins[i]
+                if pin < 0 or not pin:
+                    continue 
+
+                # a single stop's state
+                if s_state.intensity == 0:
+                    continue
+                print(i, s_state.mode, s_state.intensity)
 
     def loop_update(self):
         while True:
             self.update_state(10) 
             self.update_arduino()
-            time.sleep(10)
+            print('Done updating, waiting...')
+            time.sleep(1)
+
 
     def set_strip_for_line(self, line_and_dir, strip_pins): 
+        print(f'Setting {line_and_dir} to {strip_pins}')
         self.used_strips[line_and_dir] = strip_pins
 
 if __name__ == "__main__":
     intermediary = Intermediary() 
+    intermediary.set_strip_for_line((Line.LightBlue, Direction.Northbound),
+        list(range(40)))
     intermediary.loop_update()
