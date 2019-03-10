@@ -1,95 +1,208 @@
-from collections import defaultdict
+import time
 import json
 import enum
 
-routes_to_strip = {} 
+import datetime 
 
-destinations = {
-    'Ipswich': None,
-    'Ferny Grove': None,
-    'Redcliffe Peninsula': None,
-    'Nambour': None,
-    'Rail Bus SCAS closure': None,
-    'Doomben': None,
-    'Rosewood': None,
-    'Gympie North': None,
-    'Brisbane City': None,
-    'Varsity Lakes': None,
-    'Caboolture': None,
-    'Springfield': None,
-    'Airport': None,
-    'RAILBUS Eagle Junction': None,
-    'Shorncliffe': None,
-    'Beenleigh': None,
-    'Cleveland': None
-}
+from typing import List, Dict
 
-class RouteStrip(enum):
-    Red = enum.auto() 
-    DarkBlue = enum.auto() 
-    Yellow = enum.auto()
-    Green = enum.auto() 
-    LightBlue = enum.auto() 
-    Purple = enum.auto() 
+from collections import namedtuple
 
-route_colours = {
-    'Ipswich': RouteStrip.Green,
-    'Ferny Grove': RouteStrip.Red,
-    'Redcliffe Peninsula': RouteStrip.LightBlue,
-    'Nambour': RouteStrip.Green,
+from dank_engine_server import data_passer
+
+TrainData = namedtuple('TrainData', 'route_id trip_id prev_stop_id next_stop_id stopped percent')
+
+# load data from files
+s = datetime.datetime.now()
+print('Initialising at', s)
+
+with open('trains.json') as f:
+    trip_names = json.load(f)
+
+with open('canonical_trips_to_stops.json') as f:
+    trip_stops = json.load(f)
+
+with open('canonical_stops.json') as f:
+    canonical = json.load(f)
+
+with open('trains.json') as f:
+    train_names = json.load(f)
+
+with open('canonical_routes_to_stops.json') as f:
+    route_stops = json.load(f)
+
+print('Loading data took', datetime.datetime.now() - s)
+
+class Line(enum.Enum):
+    Red = 0xff0000
+    DarkBlue = 0x424bf4
+    Yellow = 0xffff00
+    Green = 0x00ff00
+    LightBlue = 0x41aff4
+    Purple = 0x9000ff
+
+class Direction(enum.Enum):
+    Northbound = enum.auto()
+    Southbound = enum.auto()
+
+# the 2-tuple of line colour and direction uniquely identify 
+# a LED strip.
+
+dest_to_strip = {
+    'Ipswich': (Line.Green, Direction.Northbound),
+    'Ferny Grove': (Line.Red, Direction.Northbound),
+    'Redcliffe Peninsula': (Line.LightBlue, Direction.Northbound),
+    'Nambour': (Line.Green, Direction.Northbound),
     # 'Rail Bus SCAS closure': None,
-    'Doomben': RouteStrip.Purple,
-    'Rosewood': RouteStrip.Green,
-    'Gympie North': RouteStrip.Green,
-    # 'Brisbane City': RouteStrip.,
-    'Varsity Lakes': RouteStrip.Yellow,
-    'Caboolture': RouteStrip.Green,
-    'Springfield': RouteStrip.LightBlue,
-    'Airport': RouteStrip.Yellow,
+    'Doomben': (Line.Purple, Direction.Northbound),
+    'Rosewood': (Line.Green, Direction.Southbound),
+    'Gympie North': (Line.Green, Direction.Northbound),
+    'Brisbane City': (Line.Purple, Direction.Southbound),
+    'Varsity Lakes': (Line.Yellow, Direction.Southbound),
+    'Caboolture': (Line.Green, Direction.Northbound),
+    'Springfield': (Line.LightBlue, Direction.Southbound),
+    'Airport': (Line.Yellow, Direction.Northbound),
     # 'RAILBUS Eagle Junction': None,
-    'Shorncliffe': RouteStrip.DarkBlue,
-    'Beenleigh': RouteStrip.Red,
-    'Cleveland': RouteStrip.DarkBlue
+    'Shorncliffe': (Line.DarkBlue, Direction.Northbound),
+    'Beenleigh': (Line.Red, Direction.Southbound),
+    'Cleveland': (Line.DarkBlue, Direction.Southbound)
 }
 
-canonical_trips = {
-    RouteStrip.Green: ('RWCA-1256', 'BRGY-1167'),
-    RouteStrip.Red: ('BNFG-1167', ),
-    RouteStrip.LightBlue: ('RPSP-1167', ),
-    RouteStrip.DarkBlue: ('SHCL-1167', ),
-    RouteStrip.Yellow: ('VLBD-1167', ),
-    RouteStrip.Purple: ('BRDB-1256', )
-}
-
-with open('SEQ_GTFS/trips.txt') as f:
-    trips = json.load(f)
-
-with open('SEQ_GTFS/stop_times.txt') as f:
-    stop_times = json.load(f)
-
-def find_trip_on_route(route):
-    pass
-
-for strip, routes in canonical_trips.items():
+class StopModes(enum.Enum):
+    NORMAL = enum.auto() 
+    FLASH = enum.auto()
 
 
+class StopState():
+    def __init__(self, colour):
+        self.colour = colour
+        self.reset() 
 
+    def reset(self):
+        self.mode = StopModes.NORMAL
+        self.intensity = 0
 
-line_to_stops = {}
+    def set_state(self, mode, intensity):
+        self.mode = mode
+        self.intensity = intensity
 
-def main():
-    with open('trains.json') as f:
-        trains = json.load(f)
+class RouteStripState:
+    def __init__(self, colour, direction, stops):
+        self.colour = colour 
+        self.direction = direction
+        self.stops = stops
+        self.stop_states = [StopState(colour)]
 
-    destinations = set()
-    routes_to_destinations = {}
+    def clear_stops(self):
+        for s in self.stop_states:
+            s.reset()
 
-    for code, name in trains.items():
-        name = name.replace(' Line', '').replace(' line', '')
-        routes_to_destinations[code] = name.split(' - ')
-        destinations.update(routes_to_destinations[code])
+    def set_stop_state(self, stop_id, mode, intensity): 
+        print(f'Setting stop {stop_id} to mode {mode} ({intensity}) on {self.colour}, {self.direction}.')
+        i = self.stops.index(stop_id)
+        print(f' Stop index {i}')
 
-    print(routes_to_destinations)
+        self.stop_states[i].set_state(mode, intensity)
+
+class LEDStripManager:
+    def __init__(self):
+        self.strips = []
+
+    def add_led_strip(self, pins: List[int]):
+        self.strips.append(pins)
+
+    def get_led_strip(self, strip_index):
+        return self.strips[strip_index]
+    
+
+class Intermediary:
+    def __init__(self):
+        self.strip_states = {}
+        for dest, line in dest_to_strip.items():
+            if line not in self.strip_states:
+                self.strip_states[line] = RouteStripState(line[0], line[1], route_stops['RouteStrip.'+line[0].name])
+
+        # mapping of 2-tuple (line, direction) to a list of pin numbers.
+        self.used_strips = {}
+
+    @staticmethod
+    def request_train_data():
+        # TODO: connect to provider server
+        return data_passer.get_train_data(('SPRP', ))
+
+    @staticmethod
+    def split_line_name(name):
+        return name.replace(' Line', '').replace(' line', '').split(' - ')
+
+    def update_state(self, interval):
+        data = self.request_train_data()
+        print('Updating...')
+
+        for s in self.strip_states.values():
+            # reset all stop LED states.
+            s.clear_stops()
+
+        for t in data:
+            t = TrainData(*t)
+            print()
+            print(f'Handling route {t.route_id}, trip {t.trip_id}')
+            s = (self.split_line_name(train_names[t.route_id]))
+            print(s)
+            # get 2-tuple based on s[1], the train's destination.
+            strip = dest_to_strip[s[1]]
+            strip_state = self.strip_states[strip]
+            # print(t)
+            # if train_data.timestamp:
+            #     print(train_data.arrival_time - train_data.timestamp)
+
+            # normalised canonical id of the station platform's stop id.
+            c_prev = canonical.get(t.prev_stop_id, t.prev_stop_id)
+            c_next = canonical.get(t.next_stop_id, t.next_stop_id)
+            
+            try:
+                pass
+                # cur_index = trip_stops[t.trip_id].index(can_id)
+            except IndexError:
+                print(f' WARNING: No stop {can_id} on the {t.route_id} route.')
+                continue
+
+            if strip not in self.used_strips:
+                print(f' WARNING: line {strip} has no LED strip.')
+                continue
+
+            if len(trip_stops[t.trip_id]) > len(self.used_strips[strip]):
+                print(f' WARNING: trip {t.trip_id} has more stops than LEDS on {strip}.')
+                continue
+
+            if t.stopped == 1: 
+                # train is stopped. current stop is where we're at.
+                cur_stop = c_prev
+                strip_state.set_stop_state(cur_stop, StopState.STOPPED)
+            else:
+                # train in motion. backtrack for previous stop.
+                prev_stop = c_prev
+                next_stop = c_next
+
+                strip_state.set_stop_state(prev_stop, StopState.LEAVING)
+                strip_state.set_stop_state(next_stop, StopState.APPROACH)
+
+        # print(trip_names)
+
+        print('Done')
+
+    def update_arduino(self):
+        print('Updating Arduino...')
+        pass
+
+    def loop_update(self):
+        while True:
+            self.update_state(10) 
+            self.update_arduino()
+            time.sleep(10)
+
+    def set_strip_for_line(self, line_and_dir, strip_pins): 
+        self.used_strips[line_and_dir] = strip_pins
 
 if __name__ == "__main__":
-    main()
+    intermediary = Intermediary() 
+    intermediary.loop_update()
