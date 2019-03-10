@@ -1,4 +1,3 @@
-import data_passer
 import time
 import json
 import enum
@@ -11,7 +10,7 @@ from collections import namedtuple
 
 from dank_engine_server import data_passer
 
-TrainData = namedtuple('TrainData', 'timestamp trip_id route_id stop_id stopped arrival_time arrival_delay departure_time departure_delay stop_sequence')
+TrainData = namedtuple('TrainData', 'route_id trip_id prev_stop_id next_stop_id stopped percent')
 
 # load data from files
 s = datetime.datetime.now()
@@ -69,31 +68,41 @@ dest_to_strip = {
     'Cleveland': (Line.DarkBlue, Direction.Southbound)
 }
 
+class StopModes(enum.Enum):
+    NORMAL = enum.auto() 
+    FLASH = enum.auto()
 
 
-class StopState(enum.Enum):
-    APPROACH = enum.auto() 
-    STOPPED = enum.auto() 
-    LEAVING = enum.auto()
+class StopState():
+    def __init__(self, colour):
+        self.colour = colour
+        self.reset() 
+
+    def reset(self):
+        self.mode = StopModes.NORMAL
+        self.intensity = 0
+
+    def set_state(self, mode, intensity):
+        self.mode = mode
+        self.intensity = intensity
 
 class RouteStripState:
     def __init__(self, colour, direction, stops):
         self.colour = colour 
         self.direction = direction
         self.stops = stops
-        self.stop_states = [None]*len(self.stops)
+        self.stop_states = [StopState(colour)]
 
-    def clear_state(self):
-        self.stop_states = [None]*len(self.stops)
+    def clear_stops(self):
+        for s in self.stop_states:
+            s.reset()
 
-    def set_stop_state(self, stop_id, state: StopState): 
-        print(f'Setting stop {stop_id} to state {state} on {self.colour}, {self.direction}.')
+    def set_stop_state(self, stop_id, mode, intensity): 
+        print(f'Setting stop {stop_id} to mode {mode} ({intensity}) on {self.colour}, {self.direction}.')
         i = self.stops.index(stop_id)
         print(f' Stop index {i}')
 
-        self.stop_states[i] = state
-
-
+        self.stop_states[i].set_state(mode, intensity)
 
 class LEDStripManager:
     def __init__(self):
@@ -113,6 +122,9 @@ class Intermediary:
             if line not in self.strip_states:
                 self.strip_states[line] = RouteStripState(line[0], line[1], route_stops['RouteStrip.'+line[0].name])
 
+        # mapping of 2-tuple (line, direction) to a list of pin numbers.
+        self.used_strips = {}
+
     @staticmethod
     def request_train_data():
         # TODO: connect to provider server
@@ -122,11 +134,13 @@ class Intermediary:
     def split_line_name(name):
         return name.replace(' Line', '').replace(' line', '').split(' - ')
 
-    def update(self, interval):
+    def update_state(self, interval):
         data = self.request_train_data()
         print('Updating...')
 
-        trains = []
+        for s in self.strip_states.values():
+            # reset all stop LED states.
+            s.clear_stops()
 
         for t in data:
             t = TrainData(*t)
@@ -134,40 +148,61 @@ class Intermediary:
             print(f'Handling route {t.route_id}, trip {t.trip_id}')
             s = (self.split_line_name(train_names[t.route_id]))
             print(s)
-            strip_state = self.strip_states[dest_to_strip[s[1]]]
+            # get 2-tuple based on s[1], the train's destination.
+            strip = dest_to_strip[s[1]]
+            strip_state = self.strip_states[strip]
             # print(t)
             # if train_data.timestamp:
             #     print(train_data.arrival_time - train_data.timestamp)
 
             # normalised canonical id of the station platform's stop id.
-            can_id = canonical.get(t.stop_id, t.stop_id)
+            c_prev = canonical.get(t.prev_stop_id, t.prev_stop_id)
+            c_next = canonical.get(t.next_stop_id, t.next_stop_id)
             
             try:
-                cur_index = trip_stops[t.trip_id].index(can_id)
+                pass
+                # cur_index = trip_stops[t.trip_id].index(can_id)
             except IndexError:
                 print(f' WARNING: No stop {can_id} on the {t.route_id} route.')
                 continue
+
+            if strip not in self.used_strips:
+                print(f' WARNING: line {strip} has no LED strip.')
+                continue
+
+            if len(trip_stops[t.trip_id]) > len(self.used_strips[strip]):
+                print(f' WARNING: trip {t.trip_id} has more stops than LEDS on {strip}.')
+                continue
+
             if t.stopped == 1: 
                 # train is stopped. current stop is where we're at.
-                cur_stop = can_id
+                cur_stop = c_prev
                 strip_state.set_stop_state(cur_stop, StopState.STOPPED)
             else:
                 # train in motion. backtrack for previous stop.
-                prev_stop = trip_stops[t.trip_id][max(cur_index-1, 0)]
-                next_stop = can_id
+                prev_stop = c_prev
+                next_stop = c_next
 
                 strip_state.set_stop_state(prev_stop, StopState.LEAVING)
                 strip_state.set_stop_state(next_stop, StopState.APPROACH)
-            
 
         # print(trip_names)
 
         print('Done')
 
+    def update_arduino(self):
+        print('Updating Arduino...')
+        pass
+
     def loop_update(self):
         while True:
-            self.update(10) 
+            self.update_state(10) 
+            self.update_arduino()
             time.sleep(10)
 
+    def set_strip_for_line(self, line_and_dir, strip_pins): 
+        self.used_strips[line_and_dir] = strip_pins
+
 if __name__ == "__main__":
-    Intermediary().loop_update()
+    intermediary = Intermediary() 
+    intermediary.loop_update()
