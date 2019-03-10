@@ -32,6 +32,7 @@ class SerialDevice:
         self.serial.open()
 
     def send(self, message: bytes) -> None:
+        assert len(message) < 128
         self.serial.write(message)
 
 if __name__ == '__main__':

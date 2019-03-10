@@ -121,7 +121,7 @@ class Intermediary:
         self.used_strips = {}
 
         self.builder = message.MessageBuilder()
-        self.serial = device.SerialDevice('COM6')
+        self.serial = device.SerialDevice('COM6', 9600)
         self.data = ''
 
     @staticmethod
@@ -189,6 +189,22 @@ class Intermediary:
                 strip_state.set_stop_state(next_stop, StopModes.NORMAL, float(t.percent))
 
         # print(trip_names)
+    @staticmethod
+    def scale_colour(colour, scale):
+        r = (colour & 0xff0000) >> 16
+        g = (colour & 0x00ff00) >> 8
+        b = colour & 0x0000ff
+
+        r *= scale
+        g *= scale 
+        b *= scale 
+
+        r = int(r)<<16
+        g = int(g)<<8
+        b = int(b)
+
+        colour = r | g | b
+        return colour
 
     def update_arduino(self):
         print('Updating Arduino...')
@@ -205,7 +221,9 @@ class Intermediary:
                 if s_state.intensity == 0:
                     continue
                 if s_state.mode == StopModes.NORMAL:
-                    cmd = message.build_fade_command(pin, s_state.colour.value, int(s_state.intensity*255))
+                    # print(self.scale_colour(s_state.colour.value, 1))
+                    c = self.scale_colour(s_state.colour.value, s_state.intensity)
+                    cmd = message.build_on_command(pin, c, 1)
                 elif s_state.mode == StopModes.FLASH:
                     cmd = message.build_flash_command(pin, s_state.colour.value)
                 else:
@@ -216,7 +234,6 @@ class Intermediary:
         msg = self.builder.build_message()
         self.serial.send(msg)
         print(msg)
-
 
     async def loop_update(self):
         async with aiohttp.ClientSession() as session:
