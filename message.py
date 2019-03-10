@@ -21,10 +21,10 @@ def build_off_command(id: int) -> bytes:
     return b'0,%d;' % id
 
 def build_on_command(id: int, color: int) -> bytes:
-    return b'1,%d,%x;' % (id, color)
+    return b'1,%d,%d;' % (id, color)
 
 def build_flash_command(id: int, color: int) -> bytes:
-    return b'2,%d,%x,255;' % (id, color)
+    return b'2,%d,%d,255;' % (id, color)
 
 def build_fade_command(id: int, color: int, percentage: int) -> bytes:
-    return b'3,%d,%x,%d;' % (id, color, percentage)
+    return b'3,%d,%d,%d;' % (id, color, percentage)
