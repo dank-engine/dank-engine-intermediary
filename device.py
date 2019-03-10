@@ -24,11 +24,10 @@ class SocketDevice:
 
 class SerialDevice:
     def __init__(self, port: str = 'COM3', baud_rate: int = 19200) -> None:
-        self.serial = serial.Serial()
-        self.serial.baudrate = 19200
-        self.serial.port = 'COM3'
+        self.serial = serial.Serial(port, baud_rate)
         self.serial.timeout = 1
         self.serial.rtscts = 1
+        self.serial.close()
         time.sleep(2)
         self.serial.open()
 

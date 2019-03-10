@@ -12,6 +12,7 @@ from collections import namedtuple
 
 from dank_engine_server import data_passer
 import message
+import device
 
 TrainData = namedtuple('TrainData', 'route_id trip_id prev_stop_id next_stop_id stopped percent')
 
@@ -120,7 +121,7 @@ class Intermediary:
         self.used_strips = {}
 
         self.builder = message.MessageBuilder()
-
+        self.serial = device.SerialDevice('COM6')
         self.data = ''
 
     @staticmethod
@@ -212,7 +213,9 @@ class Intermediary:
                 self.builder.add_command(cmd)
                 print(i, s_state.mode, s_state.intensity)
         
-        print(self.builder.build_message())
+        msg = self.builder.build_message()
+        self.serial.send(msg)
+        print(msg)
 
 
     async def loop_update(self):
