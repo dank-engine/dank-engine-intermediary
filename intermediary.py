@@ -9,6 +9,7 @@ from typing import List, Dict
 from collections import namedtuple
 
 from dank_engine_server import data_passer
+import message
 
 TrainData = namedtuple('TrainData', 'route_id trip_id prev_stop_id next_stop_id stopped percent')
 
@@ -116,6 +117,8 @@ class Intermediary:
         # mapping of 2-tuple (line, direction) to a list of pin numbers.
         self.used_strips = {}
 
+        self.builder = message.MessageBuilder()
+
     @staticmethod
     def request_train_data():
         # TODO: connect to provider server
@@ -126,8 +129,11 @@ class Intermediary:
         return name.replace(' Line', '').replace(' line', '').split(' - ')
 
     def update_state(self, interval):
+        print('-------------')
+        print('Getting data...')
+        start = datetime.datetime.now()
         data = self.request_train_data()
-        print('Updating...')
+        print('Parsing took', datetime.datetime.now() - start)
 
         for s in self.strip_states.values():
             # reset all stop LED states.
@@ -138,7 +144,7 @@ class Intermediary:
             print()
             print(f'Handling route {t.route_id}, trip {t.trip_id}')
             s = (self.split_line_name(train_names[t.route_id]))
-            print(s)
+            
             # get 2-tuple based on s[1], the train's destination.
             strip = dest_to_strip[s[1]]
             strip_state = self.strip_states[strip]
@@ -181,6 +187,7 @@ class Intermediary:
 
     def update_arduino(self):
         print('Updating Arduino...')
+        self.builder.clear_message()
         for strip, pins in self.used_strips.items():
             strip_state = self.strip_states[strip]
             for i, s_state in enumerate(strip_state.stop_states):
@@ -192,7 +199,17 @@ class Intermediary:
                 # a single stop's state
                 if s_state.intensity == 0:
                     continue
+                if s_state.mode == StopModes.NORMAL:
+                    cmd = message.build_fade_command(pin, s_state.colour.value, int(s_state.intensity*255))
+                elif s_state.mode == StopModes.FLASH:
+                    cmd = message.build_flash_command(pin, s_state.colour.value)
+                else:
+                    print('No command matched.')
+                self.builder.add_command(cmd)
                 print(i, s_state.mode, s_state.intensity)
+        
+        print(self.builder.build_message())
+
 
     def loop_update(self):
         while True:
