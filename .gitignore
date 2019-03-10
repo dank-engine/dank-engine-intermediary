@@ -1,5 +1,6 @@
 SEQ_GTFS.zip 
 SEQ_GTFS/
+
 test*.txt
 data_passer.py
 
