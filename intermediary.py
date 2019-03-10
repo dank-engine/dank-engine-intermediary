@@ -1,6 +1,8 @@
 import time
 import json
 import enum
+import aiohttp
+import asyncio
 
 import datetime 
 
@@ -119,6 +121,8 @@ class Intermediary:
 
         self.builder = message.MessageBuilder()
 
+        self.data = ''
+
     @staticmethod
     def request_train_data():
         # TODO: connect to provider server
@@ -132,7 +136,7 @@ class Intermediary:
         print('-------------')
         print('Getting data...')
         start = datetime.datetime.now()
-        data = self.request_train_data()
+        data = data_passer.parse_train_data(self.data, ('SPRP', ))
         print('Parsing took', datetime.datetime.now() - start)
 
         for s in self.strip_states.values():
@@ -211,12 +215,15 @@ class Intermediary:
         print(self.builder.build_message())
 
 
-    def loop_update(self):
-        while True:
-            self.update_state(10) 
-            self.update_arduino()
-            print('Done updating, waiting...')
-            time.sleep(1)
+    async def loop_update(self):
+        async with aiohttp.ClientSession() as session:
+            while True:
+                async with session.get("https://gtfsrt.api.translink.com.au/Feed/SEQ") as resp:
+                    self.data = await resp.read()
+                    self.update_state(10) 
+                    self.update_arduino()
+                    print('Done updating, waiting...')
+                    await asyncio.sleep(1)
 
 
     def set_strip_for_line(self, line_and_dir, strip_pins): 
@@ -227,4 +234,4 @@ if __name__ == "__main__":
     intermediary = Intermediary() 
     intermediary.set_strip_for_line((Line.LightBlue, Direction.Northbound),
         list(range(40)))
-    intermediary.loop_update()
+    asyncio.run(intermediary.loop_update())
