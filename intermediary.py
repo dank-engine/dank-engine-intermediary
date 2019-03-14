@@ -11,6 +11,8 @@ from typing import List, Dict
 
 from collections import namedtuple
 
+import websockets
+
 from dank_engine_server import data_passer
 import message
 import device
@@ -43,7 +45,8 @@ class Line(enum.Enum):
     DarkBlue = 0x424bf4
     Yellow = 0xffff00
     Green = 0x00ff00
-    LightBlue = 0x41aff4
+    #LightBlue = 0x41aff4
+    LightBlue = 0x344f67
     Purple = 0x9000ff
 
 class Direction(enum.Enum):
@@ -112,7 +115,7 @@ class RouteStripState:
     
 
 class Intermediary:
-    def __init__(self):
+    def __init__(self, serial_enabled=False):
         self.strip_states = {}
         for dest, line in dest_to_strip.items():
             if line not in self.strip_states:
@@ -122,7 +125,7 @@ class Intermediary:
         self.used_strips = {}
 
         self.builder = message.MessageBuilder()
-        self.serial = device.SerialDevice('COM7', 9600)
+        self.serial = device.SerialDevice('COM6', 9600) if serial_enabled else None
         self.data = ''
 
     @staticmethod
@@ -150,6 +153,7 @@ class Intermediary:
             print()
             print(f'Handling route {t.route_id}, trip {t.trip_id}')
             s = (self.split_line_name(train_names[t.route_id]))
+            print(t)
             
             # get 2-tuple based on s[1], the train's destination.
             strip = dest_to_strip[s[1]]
@@ -185,7 +189,7 @@ class Intermediary:
                 # train in motion. backtrack for previous stop.
                 prev_stop = c_prev
                 next_stop = c_next
-
+                assert 0 <= float(t.percent) <= 1
                 strip_state.set_stop_state(prev_stop, StopModes.NORMAL, 1-float(t.percent))
                 strip_state.set_stop_state(next_stop, StopModes.NORMAL, float(t.percent))
 
@@ -220,12 +224,13 @@ class Intermediary:
 
                 # a single stop's state
                 if s_state.intensity == 0:
+                    # self.serial.send(b'!0,'+str(pin).encode('utf-8')+b',0,0;$')
                     continue
                 if s_state.mode == StopModes.NORMAL:
                     # print(self.scale_colour(s_state.colour.value, 1))
-                    c = self.scale_colour(s_state.colour.value, s_state.intensity)
+                    # c = self.scale_colour(s_state.colour.value, s_state.intensity)
 
-                    cmd = message.build_fade_command(pin, c, s_state.intensity)
+                    cmd = message.build_fade_command(pin, s_state.colour.value, s_state.intensity)
                 elif s_state.mode == StopModes.FLASH:
                     cmd = message.build_flash_command(pin, s_state.colour.value)
                 else:
@@ -234,17 +239,25 @@ class Intermediary:
                 print(i, s_state.mode, s_state.intensity)
         
         msg = self.builder.build_message()
-        self.serial.send(msg)
+        if self.serial:
+            self.serial.send(msg)
+            self.serial.send(msg)
+            self.serial.send(msg)
         print(msg)
+        return msg
 
-    def loop_update(self):
-        while True:
-            self.data = requests.get("https://gtfsrt.api.translink.com.au/Feed/SEQ").content
-            self.update_state(10) 
-            self.update_arduino()
-            print('Done updating, waiting...')
-            # await asyncio.sleep(1)
 
+    async def loop_update(self, websocket, path):
+        async with aiohttp.ClientSession() as session:
+            while True:
+                async with session.get("https://gtfsrt.api.translink.com.au/Feed/SEQ") as resp:
+                    self.data = await resp.read()
+                    print(len(self.data))
+                    self.update_state(10) 
+                    print('Sending...')
+                    await websocket.send(self.update_arduino())
+                    print('Done updating, waiting...')
+                    await asyncio.sleep(1)
 
     def set_strip_for_line(self, line_and_dir, strip_pins): 
         print(f'Setting {line_and_dir} to {strip_pins}')
@@ -254,4 +267,11 @@ if __name__ == "__main__":
     intermediary = Intermediary() 
     intermediary.set_strip_for_line((Line.LightBlue, Direction.Northbound),
         list(range(40)))
-    intermediary.loop_update()
+    import logging
+    logger = logging.getLogger('websockets')
+    logger.setLevel(logging.DEBUG)
+    logger.addHandler(logging.StreamHandler())
+    # asyncio.run(intermediary.loop_update()) 
+    server = websockets.serve(intermediary.loop_update, '0.0.0.0', 8765)
+    asyncio.get_event_loop().run_until_complete(server)
+    asyncio.get_event_loop().run_forever()
