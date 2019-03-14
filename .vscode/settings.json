@@ -1,6 +1,0 @@
-{
-    "python.linting.enabled": true,
-    "python.pythonPath": "/home/leo/.local/share/virtualenvs/dank-engine-intermediary-b-kMCK1I/bin/python",
-    "python.linting.pylintEnabled": false,
-    "python.linting.flake8Enabled": true
-}
