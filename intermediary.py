@@ -22,19 +22,19 @@ TrainData = namedtuple('TrainData', 'route_id trip_id prev_stop_id \
 time_last_update = datetime.datetime.now()
 print('Initialising at', time_last_update)
 
-with open('trains.json') as f:
+with open('json/trains.json') as f:
     trip_names = json.load(f)
 
-with open('canonical_trips_to_stops.json') as f:
+with open('json/canonical_trips_to_stops.json') as f:
     trip_stops = json.load(f)
 
-with open('canonical_stops.json') as f:
+with open('json/canonical_stops.json') as f:
     canonical = json.load(f)
 
-with open('trains.json') as f:
+with open('json/trains.json') as f:
     train_names = json.load(f)
 
-with open('canonical_routes_to_stops.json') as f:
+with open('json/canonical_routes_to_stops.json') as f:
     route_stops = json.load(f)
 
 print('Loading data took', datetime.datetime.now() - time_last_update)
