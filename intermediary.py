@@ -141,7 +141,7 @@ class Intermediary:
         print('-------------')
         print('Getting data...')
         start = datetime.datetime.now()
-        data = data_passer.parse_train_data(self.data, ('SPRP', ))
+        data = data_passer.parse_train_data(self.data, ('BNFG', ))
         print('Parsing took', datetime.datetime.now() - start)
 
         for s in self.strip_states.values():
@@ -189,9 +189,11 @@ class Intermediary:
                 # train in motion. backtrack for previous stop.
                 prev_stop = c_prev
                 next_stop = c_next
-                assert 0 <= float(t.percent) <= 1
-                strip_state.set_stop_state(prev_stop, StopModes.NORMAL, 1-float(t.percent))
-                strip_state.set_stop_state(next_stop, StopModes.NORMAL, float(t.percent))
+                if 0 <= float(t.percent) <= 1:
+                    strip_state.set_stop_state(prev_stop, StopModes.NORMAL, 1-float(t.percent))
+                    strip_state.set_stop_state(next_stop, StopModes.NORMAL, float(t.percent))
+                else:
+                    print(f' WARNING: negative percentage while in transit.')
 
         # print(trip_names)
     @staticmethod
@@ -230,7 +232,7 @@ class Intermediary:
                     # print(self.scale_colour(s_state.colour.value, 1))
                     # c = self.scale_colour(s_state.colour.value, s_state.intensity)
 
-                    cmd = message.build_fade_command(pin, s_state.colour.value, s_state.intensity)
+                    cmd = message.build_on_command(pin, s_state.colour.value, int(s_state.intensity*255))
                 elif s_state.mode == StopModes.FLASH:
                     cmd = message.build_flash_command(pin, s_state.colour.value)
                 else:
@@ -265,8 +267,10 @@ class Intermediary:
 
 if __name__ == "__main__":
     intermediary = Intermediary() 
-    intermediary.set_strip_for_line((Line.LightBlue, Direction.Northbound),
+    intermediary.set_strip_for_line((Line.Yellow, Direction.Southbound),
         list(range(40)))
+    intermediary.set_strip_for_line((Line.Red, Direction.Northbound),
+        list(range(50)))
     import logging
     logger = logging.getLogger('websockets')
     logger.setLevel(logging.DEBUG)
